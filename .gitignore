@@ -1,0 +1,7 @@
+vendor/
+.env
+storage/logs/*
+storage/uploads/*
+public/assets/*.css
+public/assets/*.js
+.DS_Store

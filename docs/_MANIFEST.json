@@ -1,0 +1,139 @@
+{
+  "app": {
+    "name": "SISURAT",
+    "description": "Aplikasi web administrasi surat masuk instansi pemerintah/dinas: registrasi surat, disposisi berjenjang, pelacakan tindak lanjut, cetak lembar disposisi, dan laporan rekap.",
+    "type": "greenfield"
+  },
+  "confirmed_at": "2026-10-26T00:00:00+07:00",
+  "requirements": {
+    "goal": "Mencatat, mendistribusikan (disposisi), dan melacak surat masuk instansi agar tidak hilang atau terlambat ditindaklanjuti.",
+    "success_metric": "Persentase surat ber-disposisi yang berstatus Selesai sebelum batas waktu disposisi.",
+    "features": [
+      { "name": "Autentikasi + peran (login, logout, rate limit login)", "priority": "mvp" },
+      { "name": "Registrasi surat masuk (nomor agenda otomatis + upload scan)", "priority": "mvp" },
+      { "name": "Disposisi + status tindak lanjut", "priority": "mvp" },
+      { "name": "Pencarian dan filter surat", "priority": "mvp" },
+      { "name": "Cetak lembar disposisi", "priority": "mvp" },
+      { "name": "Laporan rekap bulanan", "priority": "mvp" },
+      { "name": "Kelola pengguna dan unit", "priority": "mvp" },
+      { "name": "Audit log", "priority": "later" },
+      { "name": "Klasifikasi/jenis surat", "priority": "later" },
+      { "name": "Lampiran multi-file per surat", "priority": "later" },
+      { "name": "Retensi dan pengarsipan surat lama", "priority": "later" }
+    ],
+    "out_of_scope": [
+      "Surat keluar dan nota dinas",
+      "Tanda tangan digital / e-sign",
+      "Notifikasi email atau WhatsApp",
+      "OCR otomatis pada scan surat",
+      "Multi-instansi (satu instalasi = satu instansi)",
+      "Aplikasi mobile native"
+    ],
+    "roles": [
+      { "name": "Admin", "can": ["kelola pengguna", "kelola unit", "lihat laporan"], "cannot": ["memberi disposisi", "mengubah isi surat"] },
+      { "name": "Operator", "can": ["registrasi dan ubah surat", "upload lampiran", "cetak lembar disposisi", "lihat laporan"], "cannot": ["memberi disposisi", "kelola pengguna"] },
+      { "name": "Pimpinan", "can": ["lihat semua surat", "memberi disposisi", "memantau tindak lanjut", "lihat laporan"], "cannot": ["mengubah isi surat", "kelola pengguna"] },
+      { "name": "Staf", "can": ["lihat surat yang didisposisikan kepadanya", "ubah status tindak lanjut disposisinya"], "cannot": ["melihat surat yang bukan untuknya", "memberi disposisi", "registrasi surat"] }
+    ],
+    "processes": [
+      {
+        "name": "Surat masuk sampai selesai",
+        "happy_path": "Operator registrasi surat (nomor agenda otomatis, upload scan) → Pimpinan beri disposisi (penerima, instruksi, batas waktu) → Staf ubah status Diterima → Diproses → Selesai → Pimpinan memantau.",
+        "failure": "File tipe/ukuran tidak valid ditolak; surat yang sudah ber-disposisi tidak bisa dihapus; Staf tak bisa membuka surat yang bukan untuknya."
+      }
+    ],
+    "entities": [
+      { "name": "users", "key_attrs": ["id", "nama", "username", "password_hash", "role", "unit_id", "aktif"], "relations": ["belongs_to units"] },
+      { "name": "units", "key_attrs": ["id", "nama", "kode"], "relations": ["has_many users"] },
+      { "name": "surat_masuk", "key_attrs": ["id", "nomor_agenda", "nomor_surat", "pengirim", "perihal", "tanggal_surat", "tanggal_diterima", "sifat", "status", "deleted_at"], "relations": ["has_one lampiran", "has_many disposisi", "created_by users"] },
+      { "name": "disposisi", "key_attrs": ["id", "surat_id", "dari_user_id", "kepada_user_id", "instruksi", "batas_waktu", "status"], "relations": ["belongs_to surat_masuk", "dari/kepada users"] },
+      { "name": "lampiran", "key_attrs": ["id", "surat_id", "nama_asli", "nama_tersimpan", "mime", "ukuran"], "relations": ["belongs_to surat_masuk"] }
+    ],
+    "sensitive_data": [
+      "password_hash pengguna (password_hash(), tidak pernah plaintext)",
+      "Lampiran scan di luar webroot, diunduh lewat controller ber-otorisasi",
+      "Surat sifat Rahasia: hanya Pimpinan, Operator pencatat, dan penerima disposisinya",
+      "Surat soft delete, tidak hard-delete"
+    ],
+    "stack": {
+      "backend": "PHP 8.3 native modular",
+      "frontend": "HTML server-rendered (template PHP polos) + Tailwind CSS standalone CLI",
+      "db": "MySQL 8.0 (utf8mb4)",
+      "versions": { "php": "8.3", "mysql": "8.0", "tailwind": "standalone CLI v3", "phpunit": "11", "nginx": "stable", "ubuntu": "24.04" },
+      "forbidden": ["framework PHP (Laravel, CodeIgniter, Symfony, dll.)", "jQuery", "Tailwind via CDN di produksi", "ORM", "pustaka UI baru tanpa lewat 22"],
+      "framework": { "backend": "none", "frontend": "none" }
+    },
+    "ui": { "enabled": true, "anchor": "Preset aman skill: netral abu + satu aksen biru #1D4ED8, Inter 14/20, radius 8 px, tanpa gradien, sidebar + topbar, desktop-first" },
+    "split": { "enabled": false, "role": "", "contract_path": "../kontrak/openapi.yaml", "contract_version": "" },
+    "architecture": {
+      "pattern": "Front controller public/index.php + router array + modul per domain modules/<domain>/{Controller,Service,Repository,views}; PDO prepared statements; template PHP polos dengan helper e()",
+      "integrations": []
+    },
+    "environment": {
+      "os": "Ubuntu 24.04 + Nginx + PHP-FPM 8.3 + MySQL 8.0",
+      "services": ["MySQL 8.0"],
+      "commands": {
+        "run": "php -S localhost:8000 -t public",
+        "test": "vendor/bin/phpunit",
+        "migrate": "php scripts/migrate.php",
+        "css": "bin/tailwindcss -i src/input.css -o public/assets/app.css --minify"
+      }
+    },
+    "testing": "Feature test untuk alur kritikal (login, registrasi surat, disposisi, otorisasi per peran, upload) + unit test logika domain (nomor agenda, transisi status).",
+    "security": [
+      "Semua input divalidasi di server",
+      "CSRF token di semua form POST",
+      "password_hash() / password_verify()",
+      "Rate limit login 5 gagal / 15 menit",
+      "Upload PDF/JPG/PNG maks 5 MB, nama acak, di luar webroot, diunduh via controller ber-otorisasi",
+      "Rahasia di .env, tidak di-commit",
+      "Otorisasi per peran di sisi server"
+    ],
+    "acceptance": "Kriteria terima per fitur (Given/When/Then) + blok verifikasi perintah.",
+    "definition_of_done": "Kriteria terima terpenuhi + tes hijau + tanpa regresi + sesuai konvensi 12 + tak melanggar guardrail 20/21.",
+    "change_policy": {
+      "git": "Branch per fitur; dilarang commit langsung ke main; merge oleh pemilik produk.",
+      "irreversible_ops": ["migrasi destruktif (DROP/ALTER hapus kolom)", "hapus data", "rilis ke produksi"],
+      "release_steps": ["tes hijau", "migrasi tervalidasi di salinan DB", "backup DB + storage/uploads", "deploy", "smoke test", "rencana rollback siap"]
+    }
+  },
+  "canonical_owners": {
+    "product_value": "00/01", "features": "01", "scope": "02", "roadmap": "03",
+    "domain_terms": "04", "roles": "05", "business_process": "06", "schema": "07",
+    "architecture": "08", "stack": "09", "dev_env": "10", "commands": "11",
+    "project_structure": "12", "testing": "13", "error_handling": "14",
+    "observability": "15", "landmines": "16", "repair_rules": "18", "guardrails": "20",
+    "security": "21", "change_policy": "22",
+    "definition_of_done": "24", "ui": "26"
+  },
+  "referenced_by": {
+    "01": ["02","03","23"], "02": ["03","17","22","23","CLAUDE"], "03": [],
+    "04": ["06","07"], "05": ["06","21","23"], "06": ["23"],
+    "07": ["06","16","18","21","23"], "08": [], "09": ["08","10","CLAUDE"], "10": [],
+    "11": ["10","13","16","23","25","CLAUDE"], "12": ["CLAUDE"], "13": ["23","24"],
+    "14": ["16"], "15": ["16"], "16": ["18"], "18": ["17"], "20": ["24","CLAUDE"],
+    "21": ["06","20","22","23"], "22": ["25","CLAUDE"], "24": ["23","25"],
+    "26": ["23","CLAUDE"]
+  },
+  "collapsed": [16, 17, 19],
+  "landmines": [],
+  "assumptions": [
+    "Mode tunggal (bukan split BE/FE): satu deployable monolit PHP.",
+    "Nomor agenda {urut 4 digit}/AGD/{tahun}, reset 1 Januari, dibuat atomik di server.",
+    "Status surat: Baru → Didisposisi → Selesai. Status disposisi: Diterima → Diproses → Selesai.",
+    "Sifat surat: Biasa / Penting / Segera / Rahasia.",
+    "Satu lampiran scan utama per surat di MVP.",
+    "Cetak lembar disposisi lewat halaman HTML @media print, bukan pustaka PDF.",
+    "Tanpa dependensi Composer runtime selain autoload.",
+    "Halaman MVP: Login, Dasbor, Daftar surat, Detail surat + disposisi, Form surat, Disposisi saya, Kelola pengguna dan unit, Laporan rekap.",
+    "Empat state (kosong/memuat/gagal/sukses) di setiap halaman ber-data; aksi destruktif lewat dialog konfirmasi.",
+    "Aksesibilitas dasar: kontras WCAG AA, input berlabel, fokus keyboard terlihat.",
+    "Token UI: primer #1D4ED8; semantik sukses #15803D, peringatan #B45309, bahaya #B91C1C, info #0369A1; Inter 14/20; radius 8 px."
+  ],
+  "open_questions": [
+    "Audit log dan klasifikasi/jenis surat (pasca-MVP).",
+    "Lampiran multi-file per surat.",
+    "Retensi dan pengarsipan surat lama.",
+    "Aksesibilitas lanjutan."
+  ]
+}
